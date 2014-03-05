@@ -1,0 +1,28 @@
+{
+	"author": "EndlessTV <tech@endlesstv.com>",
+	"contributors": [	
+		{
+			"name": "Christopher John",
+			"email": "chris@tiporskip.com"
+		}
+	],
+	"dependencies": {
+		"formidable": "x.x.x",
+		"node-uuid":"1.2.0"
+	},
+	"description": "Waiting line for EndlessTV.",
+	"devDependencies": {
+		"mocha": "x.x.x"
+	},
+	"main": "./index",
+	"name": "WaitingLine",
+	"private": true,
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/tiporskip/waitingline.git"
+	},
+	"scripts": {
+		"test": "mocha -u tdd --timeout 6500"
+	},
+	"version": "0.0.1"
+}
