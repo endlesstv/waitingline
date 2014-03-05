@@ -7,10 +7,11 @@ you're going to go first. Priority -1 means you were going to go first and then 
 
 ##Configuration
 
-_WaitingLine_ uses a simple JSON configuration object you must store in `config.json` in the
+Waitingline uses a simple JSON configuration object you must store in `config.json` in the
 root directory of the project.
 
 ```javascript
+// ./config.json
 {
 	"pg": "postgres://user:pw@server:port/database",
 	"port": 12345
@@ -23,7 +24,15 @@ The following HTTP routes are supported.
 
 ###POST /activate
 
-Activate a device.
+Activate a device. Accepts plain text or JSON data. A unique `device_id` must be supplied in the
+body of the request. A successful response should return a 201, JSON:
+
+```javascript
+{
+    "place": 57,     // The device's place in the queue
+    "total": 58      // The total number of devices in the queue
+}
+```
 
 ###POST /share
 
@@ -31,21 +40,7 @@ Notify the server of a device share; should lower the device's priority on succe
 
 ##Data Model
 
-###Device
-
-Represents a mobile device submitted to the queue for activation.
-
-```sql
-CREATE TABLE device(
-	id TEXT PRIMARY KEY,
-	priority SERIAL,		
-	is_activated BOOLEAN NOT NULL DEFAULT FALSE,
-	activated_date TIMESTAMP,
-	activationcode_id integer REFERENCES activationcode (id) ON DELETE CASCADE,	
-	created TIMESTAMP NOT NULL DEFAULT NOW(),
-	last_upd TIMESTAMP NOT NULL DEFAULT NOW()	
-);
-```
+Listed in
 
 ###ActivationCode
 
@@ -59,5 +54,22 @@ CREATE TABLE activationcode(
 	used_date TIMESTAMP,
 	created TIMESTAMP NOT NULL DEFAULT NOW(),	
 	last_upd TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+###Device
+
+Represents a mobile device submitted to the queue for activation. Due to the foreign key constraint
+on `activationcode_id`, Device depends on the existence of ActivationCode.
+
+```sql
+CREATE TABLE device(
+	id TEXT PRIMARY KEY,
+	priority SERIAL,		
+	is_activated BOOLEAN NOT NULL DEFAULT FALSE,
+	activated_date TIMESTAMP,
+	activationcode_id integer REFERENCES activationcode (id) ON DELETE CASCADE,	
+	created TIMESTAMP NOT NULL DEFAULT NOW(),
+	last_upd TIMESTAMP NOT NULL DEFAULT NOW()	
 );
 ```

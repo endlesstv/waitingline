@@ -77,7 +77,8 @@ suite("All", function() {
 		});
 	});
 
-	describe("#postActivate", function() {
+	describe("#postActivate()", function() {
+		// Device id is pretty much required for everything we do!
 		it("should return a 400 error when no device_id is supplied", function(done) {
 			var mock_data = {
 				"not_a_device_id": require("node-uuid")()
@@ -120,7 +121,7 @@ suite("All", function() {
 		});		
 	});
 
-	describe("#postShare", function() {
+	describe("#postShare()", function() {
 		it("should return a 400 error when no device_id is supplied", function(done) {
 			var mock_data = {
 				"not_a_device_id": require("node-uuid")()
