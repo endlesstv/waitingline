@@ -8,10 +8,13 @@ var REQUEST_METHOD_POST = "POST";
 var POST_ACTIVIATE = "/activate";
 var POST_SHARE = "/share";
 
+var ERROR_ACTIVATION_CODE_INVALID = new Error("Activation code has already been used or does not exist.");
+ERROR_ACTIVATION_CODE_INVALID.errorCode = 400;
+
 var ERROR_NO_DEVICE_ID = new Error("A device_id is required.");
 ERROR_NO_DEVICE_ID.errorCode = 400;
 
-var ERROR_DEVICE_EXISTS = new Error("Device is already registered.");
+var ERROR_DEVICE_EXISTS = new Error("Device is already in line.");
 ERROR_DEVICE_EXISTS.errorCode = 400;
 
 var ERROR_FAILED_DATABASE_CONNECT = new Error("Failed to connect to the database.");
@@ -62,18 +65,53 @@ var postActivate = function postActivate(data, callback) {
 			return;
 		}
 
-		// Attempt to insert the device into the database. If it fails, we can be reasonably
-		// certain that failure is caused because of key duplication, i.e. a second attempt to
-		/// register an already registered device.
-		var insert_query = "INSERT INTO device (id) VALUES ($1) RETURNING priority";
-		client.query(insert_query, [data.device_id], function onInsert(error, insert_result) {
-			if (error) {
-				done(client);
-				callback(ERROR_DEVICE_EXISTS);
+		var useActivationCode = function useActivationCode(activationcode_id, cb) {
+			var use_query = "UPDATE activationcode";
+			use_query += " SET used = TRUE, used_date = NOW(), last_upd = NOW()";
+			use_query += " WHERE id = $1";
+
+			client.query(use_query, [activationcode_id], function(error) {
+				cb(error);
+			});
+		};		
+
+		var activateDevice = function activateDevice(activationcode_id, device_id, cb) {
+			if (!activationcode_id) {
+				// Invalid activation code.
+				cb();
 				return;
 			}
 
-			var place = insert_result.rows[0].priority;
+			var activate_query = "UPDATE device";
+			activate_query += " SET is_activated = TRUE, activationcode_id = $1, activated_date = NOW(), last_upd = NOW()";
+			activate_query += " WHERE id = $2";
+			client.query(activate_query, [activationcode_id, device_id], function(error) {
+				if (error) {
+					cb(error);
+				}
+				else {
+					useActivationCode(activationcode_id, cb);
+				}
+			});
+		};
+
+		var checkDevice = function checkDevice(cb) {
+			// Check if a device has been enqueued. If it has, we execute the callback with its
+			// data as the first parameter. If it has not, the first parameter will be null. Pg
+			// throws an error when your search returns 0 results.
+			var check_query = "SELECT * FROM device WHERE id = $1";
+			client.query(check_query, [data.device_id], function onCheckDevice(error, check_result) {
+				if (error) {
+					cb(null);
+				}
+				else {
+					cb(check_result.rows[0]);
+				}
+			});
+		};
+
+		var checkPlace = function checkPlace(priority, cb) {
+			var place = priority;
 			var total = place;
 
 			// Determine the new device's place in line among the enqueued devices. We can assume
@@ -87,10 +125,157 @@ var postActivate = function postActivate(data, callback) {
 					place = count_result.rows[0].place;
 					total = count_result.rows[0].total;
 				}				
-				done(client);
-				callback(null, {"place": place, "total": total});
+				cb(place, total);
+			});			
+		};
+
+		var insertDevice = function insertDevice(activationcode_id, cb) {
+			// Attempt to insert the device into the database. If it fails, we can be reasonably
+			// certain that failure is caused because of key duplication, i.e. a second attempt to
+			/// register an already registered device.
+			var insert_query;
+			var insert_parameters;
+
+			if (activationcode_id) {
+				insert_query = "INSERT INTO device (id, is_activated, activated_date, activationcode_id) VALUES ($1, TRUE, NOW(), $2) RETURNING priority";
+				insert_parameters = [data.device_id, activationcode_id];
+			}
+			else {
+				insert_query = "INSERT INTO device (id) VALUES ($1) RETURNING priority";
+				insert_parameters = [data.device_id];
+			}
+			client.query(insert_query, [data.device_id], function onInsert(error, insert_result) {
+				if (error) {
+					cb(ERROR_DEVICE_EXISTS);
+				}
+				else {
+					if (activationcode_id) {
+						useActivationCode(activationcode_id, function(error) {
+							cb(null, insert_result.rows[0].priority);
+						});
+					}
+					else {
+						cb(null, insert_result.rows[0].priority);	
+					}
+				}
+			});	
+		};
+
+		var checkActivationCode = function checkActivationCode(code, cb) {
+			var check_query = "SELECT * FROM activationcode WHERE code = $1 AND used = FALSE";
+			client.query(check_query, [code], function(error, result) {
+				if (error || result.rows.length === 0) {
+					cb(0);
+					return;
+				}
+				console.log(result);
+				cb(result.rows[0].id);
 			});
-		});	
+		};
+
+		var response_object = {
+			"status": 0,
+			"place": 0,
+			"total": 0,
+			"activated": false
+		};
+
+		// Clean up and callback to the HTTP request.
+		var respond = function respond() {
+			done(client);
+			callback(null, response_object);
+		};
+
+		if (data.activation_code) {
+			// Check if the activation code exists and has not been used.
+			checkActivationCode(data.activation_code, function(activationcode_id) {
+				if (activationcode_id === 0) {
+					// The code was used or doesn't exist, add an error message to the response but
+					// continue logic as we may need to enqueue a new device.
+					response_object.status = 1;
+					response_object.message = ERROR_ACTIVATION_CODE_INVALID.message;
+				}
+
+				// Check the device to see if it has been previously registered. If it has, we
+				// we don't add the error as we do below, to avoid confusion on successfully
+				// activating a device that already exists.
+				checkDevice(function(device) {
+					if (device) {
+						if (device.is_activated) {
+							response_object.status = 1;
+							response_object.message = "Device is already activated";
+
+							// Don't use another activation code on this activated device.
+							activationcode_id = 0;
+							response_object.activated = true;
+						}
+
+						activateDevice(activationcode_id, device.id, function(error) {
+							if (error) {
+								response_object.status = 1;
+								response_object.message = "Failed to activate device (unknown).";
+							}
+							else if (activationcode_id > 0) {
+								response_object.activated = true;
+							}
+
+							checkPlace(device.priority, function(place, total) {		
+								response_object.place = place;
+								response_object.total = total;
+								respond();
+							});					
+						});
+					}
+					else {
+						// Because 0 is falsy, logic that inserts an activatecode_id should
+						// function normally.
+						insertDevice(activationcode_id, function(error, priority) {
+							if (error) {
+								response_object.status = 1;
+								response_object.message = error.message;
+							}
+
+							checkPlace(priority, function(place, total) {						
+								response_object.place = place;
+								response_object.total = total;
+								respond();								
+							});
+						});
+					}
+				});
+			});
+		}
+		else {
+			// We're enqueuing a device without an activation code. Check if the device is already
+			// enqueued before attempting to insert it.
+			checkDevice(function(device) {
+				if (device) {
+					response_object.activated = device.is_activated;
+					response_object.status = 1;
+					response_object.message = ERROR_DEVICE_EXISTS.message;					
+
+					checkPlace(device.priority, function(place, total) {						
+						response_object.place = place;
+						response_object.total = total;						
+						respond();
+					});
+				}
+				else {
+					insertDevice(0, function(error, priority) {
+						if (error) {
+							response_object.status = 1;
+							response_object.message = error.message;
+						}
+
+						checkPlace(priority, function(place, total) {						
+							response_object.place = place;
+							response_object.total = total;
+							respond();
+						});
+					});
+				}
+			});
+		}
 	});
 };
 exports.postActivate = postActivate;

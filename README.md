@@ -25,14 +25,19 @@ The following HTTP routes are supported.
 ###POST /activate
 
 Activate a device. Accepts plain text or JSON data. A unique `device_id` must be supplied in the
-body of the request. A successful response should return a 201, JSON:
+body of the request. Optionally, a `activation_code` may be supplied. If the `activation_code` is
+valid, the device will be activated. A successful response should return a 200 or 201, JSON:
 
 ```javascript
 {
-    "place": 57,     // The device's place in the queue
-    "total": 58      // The total number of devices in the queue
+	"activated": false,  // The device's activation status.
+    "place": 57,         // The device's place in the queue.
+    "status": 0,         // Status code of the response; 0 for success, 1 for failure.
+    "total": 58          // The total number of devices in the queue.
 }
 ```
+
+In the event that `status` indicates an error, a `message` key may supply additional data.
 
 ###POST /share
 

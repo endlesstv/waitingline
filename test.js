@@ -33,6 +33,7 @@ suite("All", function() {
 					var server_response = JSON.parse(chunk);
 					assert.ok(server_response.place > 0, "HTTP response is missing place information");
 					assert.ok(server_response.total > 0, "HTTP response is missing total information");
+					assert.equal(server_response.status, 0, "HTTP response is missing status of 0");
 				}
 			};
 			var mock_form_parser = {
@@ -104,7 +105,7 @@ suite("All", function() {
 			});
 		});
 
-		it("should return an error on an attempt to duplicate a device", function(done) {
+		it("should return status 1 on an attempt to duplicate a device", function(done) {
 			var mock_data = {
 				"device_id": require("node-uuid")()
 			};
@@ -112,13 +113,37 @@ suite("All", function() {
 			require("./index").postActivate(mock_data, function(error) {
 				assert.ok(!error, "postActivate returned an error on device insert");
 
-				require("./index").postActivate(mock_data, function(error) {
-					assert.ok(error, "postActivate return success with a duplicate device_id");
-					assert.equal(error.errorCode, 400, "postActivate returned the wrong errorCode with a duplicate");
+				require("./index").postActivate(mock_data, function(error, data) {
+					assert.ok(data, "postActivate failed to return data with a duplicate device_id");
+					assert.equal(data.status, 1, "postActivate returned the wrong status with a duplicate");
 					done();
 				});
 			});
-		});		
+		});	
+
+		it("should return status 1 on an attempt to use a bogus activationcode", function(done) {			
+			var mock_data = {
+				"device_id": require("node-uuid")(),
+				"activation_code": require("node-uuid")()
+			};
+
+			// It should also enqueue the device if it does not exist.
+			require("./index").postActivate(mock_data, function(error, data) {
+				assert.ok(data.place > 0, "postActivate failed to enqueue a new device with a bogus activation code");
+				assert.ok(data.total > 0, "postActivate failed to enqueue a new device with a bogus activation code");
+				assert.equal(data.activated, false, "postActivate activated a device with a bogus code!");
+				assert.equal(data.status, 1, "postActivate failed to return a status of 1 with a bogus code");
+
+				// It should also return the place if the user does!
+				require("./index").postActivate(mock_data, function(error, data) {
+					assert.ok(data.place > 0, "postActivate failed to enqueue a new device with a bogus activation code");
+					assert.ok(data.total > 0, "postActivate failed to enqueue a new device with a bogus activation code");
+					assert.equal(data.activated, false, "postActivate activated a device with a bogus code!");
+					assert.equal(data.status, 1, "postActivate failed to return a status of 1 with a bogus code");
+					done();
+				});
+			});
+		});
 	});
 
 	describe("#postShare()", function() {
