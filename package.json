@@ -8,7 +8,8 @@
 	],
 	"dependencies": {
 		"formidable": "x.x.x",
-		"node-uuid":"1.2.0"
+		"node-uuid":"1.2.0",
+		"pg": "2.5.1"
 	},
 	"description": "Waiting line for EndlessTV.",
 	"devDependencies": {
@@ -24,5 +25,5 @@
 	"scripts": {
 		"test": "mocha -u tdd --timeout 6500"
 	},
-	"version": "0.0.2"
+	"version": "0.0.3"
 }
