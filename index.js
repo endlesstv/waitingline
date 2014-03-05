@@ -6,6 +6,9 @@ var REQUEST_METHOD_POST = "POST";
 var POST_ACTIVIATE = "/activate";
 var POST_SHARE = "/share";
 
+var ERROR_NO_DEVICE_ID = new Error("A device_id is required.");
+ERROR_NO_DEVICE_ID.errorCode = 400;
+
 /**
  * Check if the device is in the queue. If it is not in the queue, add it to the queue.
  *
@@ -13,6 +16,11 @@ var POST_SHARE = "/share";
  * @param callback A callback function to let the HTTP server know we're done processing data.
  */
 var postActivate = exports.postActivate = function postActivate(data, callback) {
+	if (!data || !data.device_id) {
+		callback && callback(ERROR_NO_DEVICE_ID);
+		return;
+	}
+
 	callback && callback();
 };
 
@@ -22,8 +30,14 @@ var postActivate = exports.postActivate = function postActivate(data, callback) 
  *
  * @param data A data form sent by a device with some information about the share attempt.
  * @param callback A callback function to let the HTTP server know we're done processing data.
+ *
  */
 var postShare = exports.postShare = function postShare(data, callback) {
+	if (!data || !data.device_id) {
+		callback && callback(ERROR_NO_DEVICE_ID);
+		return;
+	}
+
 	callback && callback();
 };
 
@@ -41,24 +55,38 @@ var onHttpRequest = exports.onHttpRequest = function onHttpRequest(request, resp
 		form.parse(request, function onFormParsed(error, fields, files) {
 			if (error) {
 				console.log(error);
+				response.statusCode = 500;
 				response.end();
 				return;
 			}			
 
 			switch (request.url) {
 				case POST_ACTIVIATE:
-					postActivate(fields, function onActivateProcessed() {
+					postActivate(fields, function onActivateProcessed(error) {
+						if (error) {
+							response.statusCode = error.errorCode;
+						}				
+						else {
+							response.statusCode = 204;
+						}		
 						response.end();
 					});
 					break;
 
 				case POST_SHARE:
-					postShare(fields, function onShareProcessed() {
+					postShare(fields, function onShareProcessed(error) {
+						if (error) {
+							response.statusCode = error.errorCode;
+						}
+						else {
+							response.statusCode = 204;
+						}
 						response.end();
 					});
 					break;
 
-				default:						
+				default:		
+					response.statusCode = 204;				
 					response.end();
 					break;
 			}
@@ -68,6 +96,7 @@ var onHttpRequest = exports.onHttpRequest = function onHttpRequest(request, resp
 	}
 	
 	// Hang up.
+	response.statusCode = 204;
 	response.end();	
 };
 

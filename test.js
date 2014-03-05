@@ -64,6 +64,34 @@ suite("All", function() {
 		});
 	});
 
+	describe("#postActivate", function() {
+		it("should return a 400 error when no device_id is supplied", function(done) {
+			var mock_data = {
+				"not_a_device_id": require("node-uuid")()
+			};
+
+			require("./index.js").postActivate(mock_data, function(error) {
+				assert.ok(error, "postActivate returned success with no device_id");
+				assert.equal(error.errorCode, 400, "postActivate returned the wrong errorCode with no device_id");
+				done();
+			});
+		});
+	});
+
+	describe("#postShare", function() {
+		it("should return a 400 error when no device_id is supplied", function(done) {
+			var mock_data = {
+				"not_a_device_id": require("node-uuid")()
+			};
+
+			require("./index.js").postShare(mock_data, function(error) {
+				assert.ok(error, "postShare returned success with no device_id");
+				assert.equal(error.errorCode, 400, "postShare returned the wrong errorCode with no device_id");
+				done();
+			});
+		});
+	});		
+
 	after(function(done) {
 		done();
 	});
