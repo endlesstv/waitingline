@@ -6,6 +6,7 @@ var pg = require("pg");
 var WAITING_LINE_PORT = 3000;
 var REQUEST_METHOD_POST = "POST";
 var POST_ACTIVIATE = "/activate";
+var POST_REGISTER = "/register";
 var POST_SHARE = "/share";
 
 var ERROR_ACTIVATION_CODE_INVALID = new Error("Activation code has already been used or does not exist.");
@@ -13,6 +14,12 @@ ERROR_ACTIVATION_CODE_INVALID.errorCode = 400;
 
 var ERROR_NO_DEVICE_ID = new Error("A device_id is required.");
 ERROR_NO_DEVICE_ID.errorCode = 400;
+
+var ERROR_NO_EMAIL = new Error("An email address is required.");
+ERROR_NO_EMAIL.errorCode = 400;
+
+var ERROR_DEVICE_DOES_NOT_EXIST = new Error("Device not found.");
+ERROR_DEVICE_DOES_NOT_EXIST.errorCode = 400;
 
 var ERROR_DEVICE_EXISTS = new Error("Device is already in line.");
 ERROR_DEVICE_EXISTS.errorCode = 400;
@@ -41,6 +48,107 @@ var initialize = function initialize(file) {
 };
 exports.initialize = initialize;
 initialize(__dirname + "/config.json");
+
+/**
+ * Check the database for the existence of a device.
+ *
+ * The first parameter passed to the callback function should be the device record, or null if no
+ * device matching the provided device_id is found.
+ *
+ * @param client An active PostgreSQL client.
+ * @param device_id A device_id to look for.
+ * @param cb A callback function to execute after the search. See above for usage.
+ */
+var checkDevice = function checkDevice(client, device_id, cb) {
+	var check_query = "SELECT * FROM device WHERE id = $1";
+	client.query(check_query, [device_id], function onCheckDevice(error, check_result) {
+		if (error || check_result.rows.length === 0) {
+			cb();
+		}
+		else {
+			cb(check_result.rows[0]);
+		}
+	});
+};	
+exports.checkDevice = checkDevice;
+
+/**
+ * Check the database for the existence of a user by email.
+ *
+ * The first parameter passed to the callback function should be the etvuser record, or null if no
+ * etvuser record matching the provided email address is found.
+ *
+ * @param client An active PostgreSQL client.
+ * @param email An email address to look for.
+ * @param cb A callback function to execute after the search. See above for usage.
+ */
+var checkUser = function checkUser(client, email, cb) {
+	var check_query = "SELECT * FROM etvuser WHERE email = $1";
+	client.query(check_query, [email], function onCheckEtvUser(error, check_result) {
+		if (error || check_result.rows.length === 0) {
+			cb();
+		}
+		else {
+			cb(check_result.rows[0]);
+		}
+	});
+};	
+exports.checkUser = checkUser;
+
+/**
+ * One-way encodes the user's device_id and email address.
+ *
+ * @param device_id The device id to encode.
+ * @param email The email address to encode.
+ * @return An object with the salt used to pad the device_id and email and the encoded hash.
+ */
+var encodeRequestHash = function encodeRequestHash(device_id, email) {	
+	var crypto = require("crypto");
+	var uuid = require("node-uuid");
+	var salt = uuid().replace(/-/g, "");
+	var hash = crypto.createHmac("sha512", salt);
+	hash.update(email);
+	hash.update(device_id);
+	var request_hash = {
+		"salt": salt,
+		"hash": hash.digest("hex")
+	};
+	return request_hash;
+};
+exports.encodeRequestHash = encodeRequestHash;
+
+/**
+ * Creates a request to create a new user. We create a unique hash for the user, insert it into
+ * the EtvUserRequest table and finally send an email to the provided address with a link. The link
+ * should contain the hash.
+ *
+ * We can ask the user to enter their email address for additional confirmation but simply clicking
+ * on the link, given the sparsity of hash addresses, should be enough.
+ *
+ * @param client An active PostgreSQL client.
+ * @param device_id The device_id to associate with this email address.
+ * @param _email The email address of the user that we'll send a confirmation mail to.
+ * @param cb A callback function to execute after we're mailed the user. 
+ */
+var addUserRequest = function addUserRequest(client, device_id, _email, cb) {
+	var email = _email && _email.toLowerCase().replace(/[\s\r\n]/g, "");
+	if (!email) {
+		callback(ERROR_NO_EMAIL);
+		return;
+	}
+
+	var encoded = encodeRequestHash(device_id, email);
+	var request_insert =  "INSERT INTO etvuserrequest (id, email, device_id, salt) VALUES ($1, $2, $3, $4) RETURNING *;";
+
+	client.query(request_insert, [encoded.hash, email, device_id, encoded.salt], function onRequestInsert(error, result) {
+		if (error) {
+			cb(error);
+			return;
+		}
+		cb(null, result.rows[0]);
+	});
+};
+exports.addUserRequest = addUserRequest;
 
 /**
  * Check if the device is in the queue. If it is not in the queue, add it to the queue. The 
@@ -95,21 +203,6 @@ var postActivate = function postActivate(data, callback) {
 			});
 		};
 
-		var checkDevice = function checkDevice(cb) {
-			// Check if a device has been enqueued. If it has, we execute the callback with its
-			// data as the first parameter. If it has not, the first parameter will be null. Pg
-			// throws an error when your search returns 0 results.
-			var check_query = "SELECT * FROM device WHERE id = $1";
-			client.query(check_query, [data.device_id], function onCheckDevice(error, check_result) {
-				if (error) {
-					cb(null);
-				}
-				else {
-					cb(check_result.rows[0]);
-				}
-			});
-		};
-
 		var checkPlace = function checkPlace(priority, cb) {
 			var place = priority;
 			var total = place;
@@ -150,7 +243,7 @@ var postActivate = function postActivate(data, callback) {
 				}
 				else {
 					if (activationcode_id) {
-						useActivationCode(activationcode_id, function(error) {
+						useActivationCode(activationcode_id, function onActivationCodeUsed(error) {
 							cb(null, insert_result.rows[0].priority);
 						});
 					}
@@ -199,7 +292,7 @@ var postActivate = function postActivate(data, callback) {
 				// Check the device to see if it has been previously registered. If it has, we
 				// we don't add the error as we do below, to avoid confusion on successfully
 				// activating a device that already exists.
-				checkDevice(function(device) {
+				checkDevice(client, data.device_id, function onDeviceChecked(device) {
 					if (device) {
 						if (device.is_activated) {
 							response_object.status = 1;
@@ -248,7 +341,7 @@ var postActivate = function postActivate(data, callback) {
 		else {
 			// We're enqueuing a device without an activation code. Check if the device is already
 			// enqueued before attempting to insert it.
-			checkDevice(function(device) {
+			checkDevice(client, data.device_id, function onDeviceChecked(device) {
 				if (device) {
 					response_object.activated = device.is_activated;
 					response_object.status = 1;
@@ -279,6 +372,57 @@ var postActivate = function postActivate(data, callback) {
 	});
 };
 exports.postActivate = postActivate;
+
+var postRegister = function postRegister(data, mailer, callback) {
+	if (!data.device_id) {
+		callback(ERROR_NO_DEVICE_ID);
+		return;
+	}
+
+	if (!data.email) {
+		callback(ERROR_NO_EMAIL);
+		return;
+	}
+
+	// Connect to the PostgreSQL database.
+	pg.connect(SETTINGS.pg, function onPostgreSQLConnect(error, client, done) {
+		if (error) {			
+			done(client);
+			callback(ERROR_FAILED_DATABASE_CONNECT);
+			return;
+		}	
+
+		checkDevice(client, data.device_id, function onDeviceChecked(device) {
+			if (!device) {
+				callback(ERROR_DEVICE_DOES_NOT_EXIST);
+				return;
+			}
+
+			checkUser(client, data.email, function onEmailChecked(user) {
+				if (user) {
+					callback(ERROR_USER_EXISTS);
+					return;
+				}
+
+				addUserRequest(client, data.device_id, data.email, function onUserRequestAdded(error, user_request) {
+					var response_data = {
+						"status": error ? 1 : 0
+					};
+
+					if (error) {
+						callback(null, response_data);
+						return;
+					}
+
+					mailer.send(user_request.email, "Message", function onSend() {
+						callback(null, response_data);
+					});
+				});
+			});
+		});
+	});		
+};
+exports.postRegister = postRegister;
 
 /**
  * Check if the device shared. If the device shared, reward the device by lowering its priority in
@@ -338,6 +482,20 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 							response.setHeader("Content-Type", "application/json");
 							response.write(JSON.stringify(response_data));
 						}		
+						response.end();
+					});
+					break;
+
+				case POST_REGISTER:
+					postRegister(fields, function onRegisterProcessed(error, response_data) {
+						if (error) {
+							response.statusCode = error.errorCode;
+						}
+						else {
+							response.statusCode = 200;
+							response.setHeader("Content-Type", "application/json");
+							response.write(JSON.stringify(response_data));
+						}
 						response.end();
 					});
 					break;

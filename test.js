@@ -146,6 +146,73 @@ suite("All", function() {
 		});
 	});
 
+	describe("#postRegister()", function() {
+		it("should return a 400 error when no device_id is supplied", function(done) {
+			var mock_data = {
+				"not_a_device_id": require("node-uuid")()
+			};
+
+			require("./index").postRegister(mock_data, null, function(error) {
+				assert.ok(error, "postRegister return success with no device_id");
+				assert.equal(error.errorCode, 400, "postRegister return the wrong errorCode with no device_id");
+				done();
+			});
+		});
+		it("should return a 400 error when no email is supplied", function(done) {
+			var mock_data = {
+				"device_id": require("node-uuid")()
+			};
+
+			require("./index").postRegister(mock_data, null, function(error) {
+				assert.ok(error, "postRegister return success with no email");
+				assert.equal(error.errorCode, 400, "postRegister return the wrong errorCode with no email");
+				done();
+			});
+		});
+
+		it("should return a 400 if the device isn't found", function(done) {
+			var mock_data = {
+				"device_id": require("node-uuid")(),
+				"email": "Chris@endlesstv.com"
+			};
+
+			var mock_mailer = {
+				"send": function send(email, message, callback) {
+					assert.equal(mock_data.email.toLowerCase(), email, "Email address is wrong.");
+					callback();
+				}
+			};
+
+			require("./index").postRegister(mock_data, mock_mailer, function(error) {
+				assert.ok(error, "postRegister return success with no device");
+				assert.equal(error.errorCode, 400, "postRegister return the wrong errorCode with no device");
+				done();
+			});
+		});				
+
+		it("should mail me an email when i register on a valid device", function(done) {
+			var mock_data = {
+				"device_id": require("node-uuid")(),
+				"email": "Chris@endlesstv.com"
+			};
+
+			var mock_mailer = {
+				"send": function send(email, message, callback) {
+					assert.equal(mock_data.email.toLowerCase(), email, "Email address is wrong.");
+					callback();
+				}
+			};
+
+			require("./index").postActivate(mock_data, function() {
+				require("./index").postRegister(mock_data, mock_mailer, function(error, response_data) {
+					assert.ok(!error, "postRegister returned an error with correct registration data");
+					assert.equal(response_data.status, 0, "postRegister returned the wrong status code");
+					done();
+				});
+			});
+		});			
+	});
+
 	describe("#postShare()", function() {
 		it("should return a 400 error when no device_id is supplied", function(done) {
 			var mock_data = {

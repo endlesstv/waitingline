@@ -78,3 +78,45 @@ CREATE TABLE device(
 	last_upd TIMESTAMP NOT NULL DEFAULT NOW()	
 );
 ```
+
+###EtvUser
+
+Represents a user.
+
+```sql
+CREATE TABLE etvuser(
+	id SERIAL PRIMARY KEY,
+	email TEXT UNIQUE NOT NULL,
+	created TIMESTAMP NOT NULL DEFAULT NOW(),
+	last_upd TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+###EtvUserDevice
+
+Represents a relationship between a user and one or more devices.
+
+```sql
+CREATE TABLE etvuserdevice(
+	user_id integer NOT NULL REFERENCES etvuser (id) ON DELETE CASCADE,
+	device_id TEXT NOT NULL REFERENCES device (id) ON DELETE CASCADE,
+	created TIMESTAMP NOT NULL DEFAULT NOW(),
+	last_upd TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+###EtvuserRequest
+
+A request to create a user that has not yet been validated by an email link click.
+
+
+```sql
+CREATE TABLE etvuserrequest(
+	id TEXT PRIMARY KEY,
+	email TEXT NOT NULL,
+	device_id TEXT NOT NULL REFERENCES device (id) ON DELETE CASCADE,
+	salt TEXT NOT NULL,
+	created TIMESTAMP NOT NULL DEFAULT NOW(),
+	last_upd TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
