@@ -41,7 +41,7 @@ In the event that `status` indicates an error, a `message` key may supply additi
 
 ###POST /register
 
-Notify the server that a user wishes to associate an `email` with a `devices_id`, both must be
+Notify the server that a user wishes to associate an `email` with a `device_id`, both must be
 present in the request body. If successful (e.g. the user is not already validated), the server 
 will email the supplied address with a confirmation link. Clicking on the confirmation link
 will validate the user.
