@@ -39,6 +39,16 @@ valid, the device will be activated. A successful response should return a 200 o
 
 In the event that `status` indicates an error, a `message` key may supply additional data.
 
+###POST /register
+
+Notify the server that a user wishes to associate an `email` with a `devices_id`, both must be
+present in the request body. If successful (e.g. the user is not already validated), the server 
+will email the supplied address with a confirmation link. Clicking on the confirmation link
+will validate the user.
+
+Multiple validation requests can be registered to the same email address. The first one opened
+will validate the user.
+
 ###POST /share
 
 Notify the server of a device share; should lower the device's priority on success.
