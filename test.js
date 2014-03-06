@@ -193,15 +193,18 @@ suite("All", function() {
 		it("should mail me an email when i register on a valid device", function(done) {
 			var mock_data = {
 				"device_id": require("node-uuid")(),
-				"email": "Chris@endlesstv.com"
+				"email": "Codyz@endlesstv.com"
 			};
-
+			/*
 			var mock_mailer = {
 				"send": function send(email, message, callback) {
 					assert.equal(mock_data.email.toLowerCase(), email, "Email address is wrong.");
 					callback();
 				}
 			};
+			*/
+
+			var mock_mailer = {}; 
 
 			require("./index").postActivate(mock_data, function() {
 				require("./index").postRegister(mock_data, mock_mailer, function(error, response_data) {

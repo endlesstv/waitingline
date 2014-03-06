@@ -5,15 +5,20 @@ var pg = require("pg");
 
 var WAITING_LINE_PORT = 3000;
 var REQUEST_METHOD_POST = "POST";
+var REQUEST_METHOD_GET = "GET"; 
 var POST_ACTIVIATE = "/activate";
 var POST_REGISTER = "/register";
 var POST_SHARE = "/share";
+var GET_VALIDATE = "/validate"; 
 
 var ERROR_ACTIVATION_CODE_INVALID = new Error("Activation code has already been used or does not exist.");
 ERROR_ACTIVATION_CODE_INVALID.errorCode = 400;
 
 var ERROR_NO_DEVICE_ID = new Error("A device_id is required.");
 ERROR_NO_DEVICE_ID.errorCode = 400;
+
+var ERROR_BAD_HASHED_ID = new Error("Validation code not valid."); 
+ERROR_BAD_HASHED_ID.errorCode = 400; 
 
 var ERROR_NO_EMAIL = new Error("An email address is required.");
 ERROR_NO_EMAIL.errorCode = 400;
@@ -23,6 +28,9 @@ ERROR_DEVICE_DOES_NOT_EXIST.errorCode = 400;
 
 var ERROR_DEVICE_EXISTS = new Error("Device is already in line.");
 ERROR_DEVICE_EXISTS.errorCode = 400;
+
+var ERROR_PG_QUERY = new Error("Unsuccessful db query."); 
+ERROR_PG_QUERY.errorCode = 400; 
 
 var ERROR_FAILED_DATABASE_CONNECT = new Error("Failed to connect to the database.");
 ERROR_FAILED_DATABASE_CONNECT.errorCode = 500;
@@ -71,6 +79,7 @@ var checkDevice = function checkDevice(client, device_id, cb) {
 	});
 };	
 exports.checkDevice = checkDevice;
+
 
 /**
  * Check the database for the existence of a user by email.
@@ -149,6 +158,53 @@ var addUserRequest = function addUserRequest(client, device_id, _email, cb) {
 	});
 };
 exports.addUserRequest = addUserRequest;
+
+/**
+	* Check if the validation code in the query string matches one in the db, 
+	* and if so insert the user into etvuser and etvuserdevice
+*/
+var getValidate = function getValidate(hashed_id, callback) {
+	var vq = "SELECT email, device_id FROM etvuserrequest WHERE id = $1;"; 
+
+	//connect to the db 
+	pg.connect(SETTINGS.pg, function onPostgreSQLConnect(err, client, done) {
+		if (err) {
+			done(client); 
+			callback(ERROR_FAILED_DATABASE_CONNECT); 
+			return; 
+		}
+
+		client.query(vq, [hashed_id], function(err, result) {
+			if (err) {
+				console.log(err); 
+				callback(ERROR_PG_QUERY); 
+				return; 
+			}
+
+			var user_q = "INSERT INTO etvuser (email) VALUES ($1) RETURNING *;"; 
+			client.query(user_q, [result.email], function(err, user_r) {
+				if (err) {
+					console.log(err); 
+					callback(ERROR_PG_QUERY); 
+					return;
+				}
+
+				var user_id = user_r.id; 
+				var dev_id = result.device_id; 
+				var userdevq = "INSERT INTO etvuserdevice (user_id, device_id) VALUES ($1, $2);"; 
+				client.query(userdevq, [user_id, dev_id], function(err, device_result) {
+					if (err) {
+						console.log(err); 
+						callback(ERROR_PG_QUERY); 
+						return; 
+					}
+
+					
+				});
+			});
+		});
+	});
+};
 
 /**
  * Check if the device is in the queue. If it is not in the queue, add it to the queue. The 
@@ -373,6 +429,7 @@ var postActivate = function postActivate(data, callback) {
 };
 exports.postActivate = postActivate;
 
+
 var postRegister = function postRegister(data, mailer, callback) {
 	if (!data.device_id) {
 		callback(ERROR_NO_DEVICE_ID);
@@ -414,9 +471,49 @@ var postRegister = function postRegister(data, mailer, callback) {
 						return;
 					}
 
-					mailer.send(user_request.email, "Message", function onSend() {
-						callback(null, response_data);
+					// configure the nodemailer 
+
+					var nodemailer = require("nodemailer"); 
+					var creds = require("./creds.json"); 
+					var user = creds.user, pass = creds.password; 
+					var statham = nodemailer.createTransport('SMTP', {
+						service: 'Gmail', 
+						auth: {user: user, pass: pass}
 					});
+
+					mailer.transporter = statham; 
+
+					var validation_link = "http://localhost:3000/validate?code=" + user_request.id; 
+
+					var mail_body = "Thanks for queueing for Endless TV.\n"; 
+					mail_body += "Click the link below to confirm that you've done so.\n"; 
+					mail_body += "(And if you haven't, now's your chance to check it out!)\n\n\n";
+					mail_body += validation_link; 
+
+					var options = {
+						from: "Tiporskiy the Russian <tiporskip@gmail.com>", 
+						to: null, 
+						subject: "Thanks for registering", 
+						text: null
+					}; 
+					// seems a bit convoluted to maintain the mailer.send behavior...
+					var mailer_cb = function onSend(err, response) {
+						if (err) console.log(err); 
+						else {console.log("Message successfully sent");}
+						// this should be the mailer object
+						this.transporter.close(); 
+						callback(null, response_data); 
+					};
+
+					mailer_cb = mailer_cb.bind(mailer); 
+
+					mailer.send = function send(addressee, message, cb) {
+						options.to = addressee; 
+						options.text = message; 
+						this.transporter.sendMail(options, cb); 
+					}.bind(mailer);
+
+					mailer.send(user_request.email, mail_body, mailer_cb); 
 				});
 			});
 		});
