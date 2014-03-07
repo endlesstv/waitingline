@@ -175,6 +175,7 @@ var getValidate = function getValidate(hashed_id, callback) {
 		}
 
 		client.query(vq, [hashed_id], function(err, result) {
+			console.log("Attempting to query et")
 			if (err) {
 				console.log(err); 
 				callback(ERROR_PG_QUERY); 
@@ -183,23 +184,26 @@ var getValidate = function getValidate(hashed_id, callback) {
 
 			var user_q = "INSERT INTO etvuser (email) VALUES ($1) RETURNING *;"; 
 			client.query(user_q, [result.email], function(err, user_r) {
+				console.log("Attempting to insert into etvuser");
 				if (err) {
 					console.log(err); 
 					callback(ERROR_PG_QUERY); 
 					return;
 				}
 
-				var user_id = user_r.id; 
-				var dev_id = result.device_id; 
+				var user_id = user_r.rows[0].id; 
+				var dev_id = result.rows[0].device_id; 
 				var userdevq = "INSERT INTO etvuserdevice (user_id, device_id) VALUES ($1, $2);"; 
 				client.query(userdevq, [user_id, dev_id], function(err, device_result) {
+					console.log("Attempting to insert into etvuserdevice");
 					if (err) {
 						console.log(err); 
 						callback(ERROR_PG_QUERY); 
 						return; 
 					}
 
-					
+					console.log("Insertion a success."); 
+					callback(); 
 				});
 			});
 		});

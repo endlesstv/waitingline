@@ -9,7 +9,8 @@
 	"dependencies": {
 		"formidable": "x.x.x",
 		"node-uuid":"1.2.0",
-		"pg": "2.5.1"
+		"pg": "2.5.1", 
+		"nodemailer": "0.5.3"
 	},
 	"description": "Waiting line for EndlessTV.",
 	"devDependencies": {
