@@ -175,14 +175,14 @@ suite("All", function() {
 				"device_id": require("node-uuid")(),
 				"email": "Chris@endlesstv.com"
 			};
-
+			
 			var mock_mailer = {
-				"send": function send(email, message, callback) {
-					assert.equal(mock_data.email.toLowerCase(), email, "Email address is wrong.");
+				"sendMail": function send(options, callback) {
+					assert.equal(mock_data.email.toLowerCase(), options.to, "Email address is wrong.");
 					callback();
 				}
 			};
-
+			
 			require("./index").postRegister(mock_data, mock_mailer, function(error) {
 				assert.ok(error, "postRegister return success with no device");
 				assert.equal(error.errorCode, 400, "postRegister return the wrong errorCode with no device");
@@ -193,19 +193,17 @@ suite("All", function() {
 		it("should mail me an email when i register on a valid device", function(done) {
 			var mock_data = {
 				"device_id": require("node-uuid")(),
-				"email": "Codyz@endlesstv.com"
+				"email": "Chris@endlesstv.com"
 			};
-			/*
+			
 			var mock_mailer = {
-				"send": function send(email, message, callback) {
-					assert.equal(mock_data.email.toLowerCase(), email, "Email address is wrong.");
+				"sendMail": function send(options, callback) {
+					var email = mock_data.email.toLowerCase();
+					assert.equal(email, options.to, "Email address is wrong.");
 					callback();
 				}
 			};
-			*/
-
-			var mock_mailer = {}; 
-
+			
 			require("./index").postActivate(mock_data, function() {
 				require("./index").postRegister(mock_data, mock_mailer, function(error, response_data) {
 					assert.ok(!error, "postRegister returned an error with correct registration data");

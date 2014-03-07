@@ -11,12 +11,31 @@ Waitingline uses a simple JSON configuration object you must store in `config.js
 root directory of the project.
 
 ```javascript
-// ./config.json
+// config.json
 {
+	// Required; connecting string for PostgreSQL.
 	"pg": "postgres://user:pw@server:port/database",
-	"port": 12345
+
+	// Optional; a port to accept HTTP requests on.
+	"port": 12345,
+
+	// Optional; used to send email during registration. 
+	"mail": {
+		"service": "Provider",
+		"user": "sender@provider.com",
+		"pass": "passwordForSender"
+	}
 }
 ```
+
+##Testing
+
+To run tests, specify a testing configuration in `testing.json`. It has the same format and values
+as the `config.json` example above.
+
+WaitingLine uses Mocha to perform unit and integration tests. Please run tests with `npm test`
+before pushing code to master. Testing adds and removes records from the database, so please check
+and make sure your PostgreSQL connection string points to a development database.
 
 ##Routes
 
