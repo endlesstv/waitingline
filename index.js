@@ -182,16 +182,19 @@ var getValidate = function getValidate(hashed_id, callback) {
 		}
 
 		client.query(vq, [hashed_id], function(err, result) {
-			console.log("Attempting to query et")
 			if (err) {
 				console.log(err); 
 				callback(ERROR_PG_QUERY); 
 				return; 
 			}
 
+			if (result.rows.length === 0) {
+				callback(ERROR_BAD_HASHED_ID); 
+				return; 
+			} 
+
 			var user_q = "INSERT INTO etvuser (email) VALUES ($1) RETURNING *;"; 
-			client.query(user_q, [result.email], function(err, user_r) {
-				console.log("Attempting to insert into etvuser");
+			client.query(user_q, [result.rows[0].email], function(err, user_r) {
 				if (err) {
 					console.log(err); 
 					callback(ERROR_PG_QUERY); 
@@ -202,20 +205,20 @@ var getValidate = function getValidate(hashed_id, callback) {
 				var dev_id = result.rows[0].device_id; 
 				var userdevq = "INSERT INTO etvuserdevice (user_id, device_id) VALUES ($1, $2);"; 
 				client.query(userdevq, [user_id, dev_id], function(err, device_result) {
-					console.log("Attempting to insert into etvuserdevice");
 					if (err) {
 						console.log(err); 
 						callback(ERROR_PG_QUERY); 
 						return; 
 					}
 
-					console.log("Insertion a success."); 
 					callback(); 
 				});
 			});
 		});
 	});
 };
+
+exports.getValidate = getValidate; 
 
 /**
  * Check if the device is in the queue. If it is not in the queue, add it to the queue. The 
@@ -328,7 +331,6 @@ var postActivate = function postActivate(data, callback) {
 					cb(0);
 					return;
 				}
-				console.log(result);
 				cb(result.rows[0].id);
 			});
 		};
@@ -619,11 +621,42 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 	    });
 
 	    return;
-	}
-	
+	} // end if 
+	else if (request.method.toUpperCase() === REQUEST_METHOD_GET) {
+		var route = request.url.slice(0, request.url.indexOf("?")); 
+ 
+		switch(route) {
+
+			case GET_VALIDATE: 
+				var code = request.url.slice(request.url.indexOf("code=") + 5); 
+				getValidate(code, function(error) {
+					if (error) {
+						console.log(error); 
+						response.statusCode = error.errorCode; 
+					} else {
+						response.writeHead(200, {"Content-Type": "application/json"}); 
+						var message = "Thanks for confirming!"; 
+						var json = {}; 
+						json.message = message; 
+						json.validation = "success"; 
+						response.write(JSON.stringify(json)); 
+					}
+					response.end(); 
+				});
+				break; 
+
+			default: 
+				response.statusCode = 204; 
+				response.end(); 
+				break; 
+		}
+	} // end else if 
+
 	// Hang up.
-	response.statusCode = 204;
-	response.end();	
+	else {
+		response.statusCode = 204;
+		response.end();	
+	}
 };
 exports.onHttpRequest = onHttpRequest;
 

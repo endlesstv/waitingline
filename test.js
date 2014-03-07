@@ -226,7 +226,17 @@ suite("All", function() {
 				done();
 			});
 		});
-	});		
+	});
+
+	describe("#getValidate()", function() {
+		it("should return a 400 with a non-existent validation code", function(done) {
+			var mock_code = "14"; 
+			require("./index").getValidate(mock_code, function(error) {
+				assert.equal(error.errorCode, 400, "invalid code"); 
+				done(); 
+			}); // end gV cb
+		}); // end it
+	}); // end describe	
 
 	after(function(done) {
 		done();
