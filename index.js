@@ -57,6 +57,13 @@ var initialize = function initialize(file) {
 exports.initialize = initialize;
 initialize(__dirname + "/config.json");
 
+
+/**
+ * Nodemailer allows to send email. Transporters are created as needed.
+ */
+var nodemailer = require("nodemailer");
+
+
 /**
  * Check the database for the existence of a device.
  *
@@ -160,9 +167,9 @@ var addUserRequest = function addUserRequest(client, device_id, _email, cb) {
 exports.addUserRequest = addUserRequest;
 
 /**
-	* Check if the validation code in the query string matches one in the db, 
-	* and if so insert the user into etvuser and etvuserdevice
-*/
+ * Check if the validation code in the query string matches one in the db, 
+ * and if so insert the user into etvuser and etvuserdevice
+ */
 var getValidate = function getValidate(hashed_id, callback) {
 	var vq = "SELECT email, device_id FROM etvuserrequest WHERE id = $1;"; 
 
@@ -434,7 +441,7 @@ var postActivate = function postActivate(data, callback) {
 exports.postActivate = postActivate;
 
 
-var postRegister = function postRegister(data, mailer, callback) {
+var postRegister = function postRegister(data, transporter, callback) {
 	if (!data.device_id) {
 		callback(ERROR_NO_DEVICE_ID);
 		return;
@@ -475,19 +482,7 @@ var postRegister = function postRegister(data, mailer, callback) {
 						return;
 					}
 
-					// configure the nodemailer 
-
-					var nodemailer = require("nodemailer"); 
-					var creds = require("./creds.json"); 
-					var user = creds.user, pass = creds.password; 
-					var statham = nodemailer.createTransport('SMTP', {
-						service: 'Gmail', 
-						auth: {user: user, pass: pass}
-					});
-
-					mailer.transporter = statham; 
-
-					var validation_link = "http://localhost:3000/validate?code=" + user_request.id; 
+					var validation_link = "http://localhost:3000/validate?code=" + user_request.id;
 
 					var mail_body = "Thanks for queueing for Endless TV.\n"; 
 					mail_body += "Click the link below to confirm that you've done so.\n"; 
@@ -496,28 +491,18 @@ var postRegister = function postRegister(data, mailer, callback) {
 
 					var options = {
 						from: "Tiporskiy the Russian <tiporskip@gmail.com>", 
-						to: null, 
-						subject: "Thanks for registering", 
-						text: null
+						to: user_request.email, 
+						subject: "Thanks for registering with EndlessTV!", 
+						text: mail_body
 					}; 
-					// seems a bit convoluted to maintain the mailer.send behavior...
-					var mailer_cb = function onSend(err, response) {
-						if (err) console.log(err); 
-						else {console.log("Message successfully sent");}
-						// this should be the mailer object
-						this.transporter.close(); 
-						callback(null, response_data); 
-					};
 
-					mailer_cb = mailer_cb.bind(mailer); 
+					transporter.sendMail(options, function onMailTransport(error, response) {
+						if (error) {
+							console.log(error);
+						}
 
-					mailer.send = function send(addressee, message, cb) {
-						options.to = addressee; 
-						options.text = message; 
-						this.transporter.sendMail(options, cb); 
-					}.bind(mailer);
-
-					mailer.send(user_request.email, mail_body, mailer_cb); 
+						callback(null, response_data);
+					});
 				});
 			});
 		});
@@ -588,7 +573,20 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 					break;
 
 				case POST_REGISTER:
-					postRegister(fields, function onRegisterProcessed(error, response_data) {
+					var transporter = nodemailer.createTransport("SMTP", {
+						"service": SETTINGS.mail && SETTINGS.mail.service, 
+						"auth": {
+							"user": SETTINGS.mail && SETTINGS.mail.user,
+							"pass": SETTINGS.mail && SETTINGS.mail.pass
+						}
+					});
+
+					// We inject an email transporter so that we can mock an email transporter
+					// during integration and unit testing.
+					postRegister(fields, transporter, function onRegisterProcessed(error, response_data) {
+						// Close our mail transporter regardless of the outcome.
+						transporter.close();						
+
 						if (error) {
 							response.statusCode = error.errorCode;
 						}
