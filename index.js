@@ -20,6 +20,9 @@ ERROR_NO_DEVICE_ID.errorCode = 400;
 var ERROR_BAD_HASHED_ID = new Error("Validation code not valid."); 
 ERROR_BAD_HASHED_ID.errorCode = 400; 
 
+var ERROR_BAD_SHARE_TYPE = new Error("You can't share with that service. Get on the Twitter!"); 
+ERROR_BAD_SHARE_TYPE.errorCode = 400; 
+
 var ERROR_NO_EMAIL = new Error("An email address is required.");
 ERROR_NO_EMAIL.errorCode = 400;
 
@@ -36,6 +39,10 @@ var ERROR_FAILED_DATABASE_CONNECT = new Error("Failed to connect to the database
 ERROR_FAILED_DATABASE_CONNECT.errorCode = 500;
 
 var SETTINGS;
+
+var TWITTER_PERCENT_JUMP = 0.05; 
+var FACEBOOK_PERCENT_JUMP = 0.10; 
+
 
 /**
  * We'll pulling settings from an external configuration file that is in this directory but not a
@@ -525,17 +532,63 @@ var postShare = function postShare(data, callback) {
 		return;
 	}
 
-	pg.connect(SETTINGS.pg, function onPostgreSQLConnect(error, client, done) {
-		if (error) {			
-			done(client);
-			callback(ERROR_FAILED_DATABASE_CONNECT);
-			return;
-		}
+	if (!data.sharetype || (data.sharetype !== "twitter" && data.sharetype !== "facebook")) {
+		callback(ERROR_BAD_SHARE_TYPE); 
+		return; 
+	}
+
+	var onPostShare = function onPostShare(device_id, sharetype) {
+
+		pg.connect(SETTINGS.pg, function onPostgreSQLConnect(error, client, done) {
+			if (error) {
+				done(client); 
+				callback(ERROR_FAILED_DATABASE_CONNECT); 
+				return; 
+			}
+
+			var q = "UPDATE device SET priority = floor(" + 0.95 + "* priority) WHERE id = $1 RETURNING *;"; 
+			var decrement = 1;  
+			decrement -= sharetype === "facebook" ? FACEBOOK_PERCENT_JUMP : TWITTER_PERCENT_JUMP;  
+
+			client.query(q, [device_id], function(err, result) {
+				if (err) {
+					console.log(err); 
+					callback(ERROR_PG_QUERY); 
+					return; 
+				}
+
+				var response_data = {
+					"status": error ? 1 : 0, 
+					"priority": result.rows[0].priority 
+				}; 
+
+				// if no result the device id does not exist 
+				if (result.rows.length === 0) {
+					callback(ERROR_DEVICE_DOES_NOT_EXIST); 
+					return; 
+				}
+
+				done(client); 
+				callback(null, response_data); 
+			});
+		});
+	};
+
+	onPostShare(data.device_id, data.sharetype); 
+
+	// pg.connect(SETTINGS.pg, function onPostgreSQLConnect(error, client, done) {
+	// 	if (error) {			
+	// 		done(client);
+	// 		callback(ERROR_FAILED_DATABASE_CONNECT);
+	// 		return;
+	// 	}
 
 
-		done(client);
-		callback();
-	});
+	// 	done(client);
+	// 	callback();
+	// });
+
+	
 };
 exports.postShare = postShare;
 
@@ -602,12 +655,14 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 					break;
 
 				case POST_SHARE:
-					postShare(fields, function onShareProcessed(error) {
+					postShare(fields, function onShareProcessed(error, response_data) {
 						if (error) {
 							response.statusCode = error.errorCode;
 						}
 						else {
-							response.statusCode = 204;
+							response.statusCode = 200;
+							response.setHeader("Content-Type", "application/json"); 
+							response.write(JSON.stringify(response_data)); 
 						}
 						response.end();
 					});

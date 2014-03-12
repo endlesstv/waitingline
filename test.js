@@ -226,6 +226,37 @@ suite("All", function() {
 				done();
 			});
 		});
+
+		it("should return a 400 when an invalid sharetype is posted", function(done) {
+			// valid id of the device table in the db, it would hit the device_id error first
+			var valid_device_id = "862600a5-1119-4209-835a-4a60790d2d24"; 
+			var mock_data = {
+				"device_id": valid_device_id, 
+				"sharetype": "tweeter"
+			}; 
+
+			require("./index").postShare(mock_data, function(error) {
+				assert.ok(error, "postShare returned success with bad sharetype"); 
+				assert.equal(error.errorCode, 400, "wrong errorCode with bad sharetype"); 
+				done(); 
+			});
+		});
+
+		it("should return a 200 with a valid share type and device_id", function(done) {
+			// same as id above
+			var valid_device_id = "862600a5-1119-4209-835a-4a60790d2d24"; 
+			var mock_data = {
+				"device_id": valid_device_id, 
+				"sharetype": "twitter"
+			};
+
+			require("./index").postShare(mock_data, function(error, response_data) {
+				assert.ok(!error, "postShare returned with an error object"); 
+				assert.equal(response_data.status, 0, "postShare returned with the wrong status code"); 
+				assert.ok(response_data.priority, "postShare returned without a priority field"); 
+				done(); 
+			});
+		});
 	});
 
 	describe("#getValidate()", function() {
