@@ -575,20 +575,6 @@ var postShare = function postShare(data, callback) {
 	};
 
 	onPostShare(data.device_id, data.sharetype); 
-
-	// pg.connect(SETTINGS.pg, function onPostgreSQLConnect(error, client, done) {
-	// 	if (error) {			
-	// 		done(client);
-	// 		callback(ERROR_FAILED_DATABASE_CONNECT);
-	// 		return;
-	// 	}
-
-
-	// 	done(client);
-	// 	callback();
-	// });
-
-	
 };
 exports.postShare = postShare;
 
