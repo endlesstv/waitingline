@@ -546,9 +546,9 @@ var postShare = function postShare(data, callback) {
 				return; 
 			}
 
-			var q = "UPDATE device SET priority = floor(" + 0.95 + "* priority) WHERE id = $1 RETURNING *;"; 
 			var decrement = 1;  
 			decrement -= sharetype === "facebook" ? FACEBOOK_PERCENT_JUMP : TWITTER_PERCENT_JUMP;  
+			var q = "UPDATE device SET priority = floor(" + decrement + "* priority) WHERE id = $1 RETURNING *;"; 
 
 			client.query(q, [device_id], function(err, result) {
 				if (err) {
