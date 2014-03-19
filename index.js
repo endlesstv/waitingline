@@ -156,7 +156,7 @@ exports.encodeRequestHash = encodeRequestHash;
 var addUserRequest = function addUserRequest(client, device_id, _email, cb) {
 	var email = _email && _email.toLowerCase().replace(/[\s\r\n]/g, "");
 	if (!email) {
-		callback(ERROR_NO_EMAIL);
+		cb(ERROR_NO_EMAIL);
 		return;
 	}
 
@@ -191,11 +191,13 @@ var getValidate = function getValidate(hashed_id, callback) {
 		client.query(vq, [hashed_id], function(err, result) {
 			if (err) {
 				console.log(err); 
+				done(client);
 				callback(ERROR_PG_QUERY); 
 				return; 
 			}
 
 			if (result.rows.length === 0) {
+				done(client);
 				callback(ERROR_BAD_HASHED_ID); 
 				return; 
 			} 
@@ -204,6 +206,7 @@ var getValidate = function getValidate(hashed_id, callback) {
 			client.query(user_q, [result.rows[0].email], function(err, user_r) {
 				if (err) {
 					console.log(err); 
+					done(client);
 					callback(ERROR_PG_QUERY); 
 					return;
 				}
@@ -215,9 +218,11 @@ var getValidate = function getValidate(hashed_id, callback) {
 					if (err) {
 						console.log(err); 
 						callback(ERROR_PG_QUERY); 
+						done(client);
 						return; 
 					}
 
+					done(client);
 					callback(); 
 				});
 			});
@@ -471,12 +476,14 @@ var postRegister = function postRegister(data, transporter, callback) {
 
 		checkDevice(client, data.device_id, function onDeviceChecked(device) {
 			if (!device) {
+				done(client);
 				callback(ERROR_DEVICE_DOES_NOT_EXIST);
 				return;
 			}
 
 			checkUser(client, data.email, function onEmailChecked(user) {
 				if (user) {
+					done(client);
 					callback(ERROR_USER_EXISTS);
 					return;
 				}
@@ -486,6 +493,8 @@ var postRegister = function postRegister(data, transporter, callback) {
 						"status": error ? 1 : 0
 					};
 
+					done(client);
+					
 					if (error) {
 						callback(null, response_data);
 						return;
@@ -509,7 +518,6 @@ var postRegister = function postRegister(data, transporter, callback) {
 						if (error) {
 							console.log(error);
 						}
-
 						callback(null, response_data);
 					});
 				});
@@ -551,12 +559,12 @@ var postShare = function postShare(data, callback) {
 			var q = "UPDATE device SET priority = floor(" + decrement + "* priority) WHERE id = $1 RETURNING *;"; 
 
 			client.query(q, [device_id], function(err, result) {
+				done(client);
 				if (err) {
 					console.log(err); 
 					callback(ERROR_PG_QUERY); 
 					return; 
 				}
-
 				var response_data = {
 					"status": error ? 1 : 0, 
 					"priority": result.rows[0].priority 
@@ -568,7 +576,6 @@ var postShare = function postShare(data, callback) {
 					return; 
 				}
 
-				done(client); 
 				callback(null, response_data); 
 			});
 		});
