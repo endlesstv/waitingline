@@ -65,6 +65,14 @@ exports.initialize = initialize;
 initialize(__dirname + "/config.json");
 
 
+/** 
+ * Read files for html, txt emails
+ */
+var EMAIL_CONTENT = {};
+EMAIL_CONTENT.html = fs.readFileSync(__dirname + '/templates/mail/welcome_mail.html', "utf8");
+EMAIL_CONTENT.txt = fs.readFileSync(__dirname + '/templates/mail/welcome_mail.txt', "utf8");
+
+
 /**
  * Nodemailer allows to send email. Transporters are created as needed.
  */
@@ -213,7 +221,7 @@ var getValidate = function getValidate(hashed_id, callback) {
 
 				var user_id = user_r.rows[0].id; 
 				var dev_id = result.rows[0].device_id; 
-				var userdevq = "INSERT INTO etvuserdevice (user_id, device_id) VALUES ($1, $2);"; 
+				var userdevq = "insert INTO etvuserdevice (user_id, device_id) VALUES ($1, $2);"; 
 				client.query(userdevq, [user_id, dev_id], function(err, device_result) {
 					if (err) {
 						console.log(err); 
@@ -500,20 +508,22 @@ var postRegister = function postRegister(data, transporter, callback) {
 						return;
 					}
 
-					var validation_link = "http://localhost:3000/validate?code=" + user_request.id;
+					var validation_link = "http://" + SETTINGS.domain + SETTINGS.port + "/validate?code=" + user_request.id;
 
+					/*
 					var mail_body = "Thanks for queueing for Endless TV.\n"; 
 					mail_body += "Click the link below to confirm that you've done so.\n"; 
 					mail_body += "(And if you haven't, now's your chance to check it out!)\n\n\n";
 					mail_body += validation_link; 
+					*/
 
 					var options = {
-						from: "Tiporskiy the Russian <tiporskip@gmail.com>", 
+						from: "EndlessTV <hello@mail.endlesstv.com>", 
 						to: user_request.email, 
-						subject: "Thanks for registering with EndlessTV!", 
-						text: mail_body
+						subject: "Get early access to EndlessTV", 
+						text: EMAIL_CONTENT.txt.replace(/\{{VALIDATION_LINK}}/, validation_link).replace(/\n/g,"\r\n"),
+						html: EMAIL_CONTENT.html.replace(/\{{VALIDATION_LINK}}/, validation_link)
 					}; 
-
 					transporter.sendMail(options, function onMailTransport(error, response) {
 						if (error) {
 							console.log(error);
