@@ -516,7 +516,7 @@ var postRegister = function postRegister(data, transporter, callback) {
 						return;
 					}
 
-					var validation_link = "http://" + SETTINGS.domain + SETTINGS.port + "/validate?code=" + user_request.id;
+					var validation_link = "http://" + SETTINGS.domain + ":" + SETTINGS.port + "/validate?code=" + user_request.id;
 
 					/*
 					var mail_body = "Thanks for queueing for Endless TV.\n"; 
