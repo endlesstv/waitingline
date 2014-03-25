@@ -66,11 +66,19 @@ initialize(__dirname + "/config.json");
 
 
 /** 
- * Read files for html, txt emails
+ * Read files for emails (html and plain text)
  */
 var EMAIL_CONTENT = {};
 EMAIL_CONTENT.html = fs.readFileSync(__dirname + '/templates/mail/welcome_mail.html', "utf8");
 EMAIL_CONTENT.txt = fs.readFileSync(__dirname + '/templates/mail/welcome_mail.txt', "utf8");
+
+/**
+ * Read files for HTML files for validation
+ */
+var HTML_CONTENT = {};
+HTML_CONTENT.validation_template = fs.readFileSync(__dirname + '/templates/html/confirm_mail.html', "utf8");
+HTML_CONTENT.validation_partial_success = fs.readFileSync(__dirname + '/templates/html/confirm_mail_success_partial.html', "utf8");
+HTML_CONTENT.validation_partial_fail = fs.readFileSync(__dirname + '/templates/html/confirm_mail_fail_partial.html', "utf8");
 
 
 /**
@@ -687,18 +695,28 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 
 			case GET_VALIDATE: 
 				var code = request.url.slice(request.url.indexOf("code=") + 5); 
+				var out;
 				getValidate(code, function(error) {
 					if (error) {
 						console.log(error); 
 						response.statusCode = error.errorCode; 
+						out = HTML_CONTENT.validation_template
+							.replace(/\{{HTML_CONTENT}}/, HTML_CONTENT.validation_partial_fail)
+							.replace(/\r?\n|\r/g, '');
 					} else {
-						response.writeHead(200, {"Content-Type": "application/json"}); 
-						var message = "Thanks for confirming!"; 
-						var json = {}; 
-						json.message = message; 
-						json.validation = "success"; 
-						response.write(JSON.stringify(json)); 
+						response.statusCode = 200;
+						out = HTML_CONTENT.validation_template
+							.replace(/\{{HTML_CONTENT}}/, HTML_CONTENT.validation_partial_success)
+							.replace(/\r?\n|\r/g, '');
+						//response.writeHead(200, {"Content-Type": "application/json"}); 
+						//var message = "Thanks for confirming!"; 
+						//var json = {}; 
+						//json.message = message; 
+						//json.validation = "success"; 
+						//response.write(JSON.stringify(json)); 
 					}
+					response.writeHead(response.statusCode, {"Content-Type": "text/html"}); 
+					response.write(out); 
 					response.end(); 
 				});
 				break; 
