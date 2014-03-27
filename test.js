@@ -131,14 +131,14 @@ suite("All", function() {
 			require("./index").postActivate(mock_data, function(error, data) {
 				assert.ok(data.place > 0, "postActivate failed to enqueue a new device with a bogus activation code");
 				assert.ok(data.total > 0, "postActivate failed to enqueue a new device with a bogus activation code");
-				assert.equal(data.activated, false, "postActivate activated a device with a bogus code!");
+				assert.equal(data.activated, Date.now() < new Date("3/29/3014").getTime(), "postActivate activated a device with a bogus code!");
 				assert.equal(data.status, 1, "postActivate failed to return a status of 1 with a bogus code");
 
 				// It should also return the place if the user does!
 				require("./index").postActivate(mock_data, function(error, data) {
 					assert.ok(data.place > 0, "postActivate failed to enqueue a new device with a bogus activation code");
 					assert.ok(data.total > 0, "postActivate failed to enqueue a new device with a bogus activation code");
-					assert.equal(data.activated, false, "postActivate activated a device with a bogus code!");
+					assert.equal(data.activated, Date.now() < new Date("3/29/3014").getTime(), "postActivate activated a device with a bogus code!");
 					assert.equal(data.status, 1, "postActivate failed to return a status of 1 with a bogus code");
 					done();
 				});

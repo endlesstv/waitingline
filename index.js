@@ -43,6 +43,8 @@ var SETTINGS;
 var TWITTER_PERCENT_JUMP = 0.05; 
 var FACEBOOK_PERCENT_JUMP = 0.10; 
 
+var LOCKDOWN_DATE = new Date("3/29/2014");
+
 
 /**
  * We'll pulling settings from an external configuration file that is in this directory but not a
@@ -330,11 +332,16 @@ var postActivate = function postActivate(data, callback) {
 			if (activationcode_id) {
 				insert_query = "INSERT INTO device (id, is_activated, activated_date, activationcode_id) VALUES ($1, TRUE, NOW(), $2) RETURNING priority";
 				insert_parameters = [data.device_id, activationcode_id];
-			}
-			else {
+			} else if (Date.now() < LOCKDOWN_DATE.getTime()) {
+				// The queue is not in place yet.
+				insert_query = "INSERT INTO device (id, is_activated, activated_date) VALUES ($1, TRUE, NOW()) RETURNING priority";
+				insert_parameters = [data.device_id];
+			} else {
+				// The queue is in place, don't set is_activated = TRUE.
 				insert_query = "INSERT INTO device (id) VALUES ($1) RETURNING priority";
 				insert_parameters = [data.device_id];
 			}
+
 			client.query(insert_query, [data.device_id], function onInsert(error, insert_result) {
 				if (error) {
 					cb(ERROR_DEVICE_EXISTS);
@@ -416,7 +423,7 @@ var postActivate = function postActivate(data, callback) {
 							});					
 						});
 					}
-					else {
+					else {						
 						// Because 0 is falsy, logic that inserts an activatecode_id should
 						// function normally.
 						insertDevice(activationcode_id, function(error, priority) {
@@ -424,6 +431,7 @@ var postActivate = function postActivate(data, callback) {
 								response_object.status = 1;
 								response_object.message = error.message;
 							}
+							response_object.activated = Date.now() < LOCKDOWN_DATE.getTime();
 
 							checkPlace(priority, function(place, total) {						
 								response_object.place = place;
@@ -450,11 +458,11 @@ var postActivate = function postActivate(data, callback) {
 						respond();
 					});
 				}
-				else {
+				else {					
 					insertDevice(0, function(error, priority) {
 						if (error) {
 							response_object.status = 1;
-							response_object.message = error.message;
+							response_object.message = error.message;							
 						}
 
 						checkPlace(priority, function(place, total) {						
