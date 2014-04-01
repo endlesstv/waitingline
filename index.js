@@ -46,6 +46,8 @@ var FACEBOOK_PERCENT_JUMP = 0.10;
 
 var LOCKDOWN_DATE = new Date("3/29/2014");
 
+var SIGNUPS_PER_ACTIVATION = 10;
+
 
 /**
  * We'll pulling settings from an external configuration file that is in this directory but not a
@@ -341,6 +343,19 @@ var postActivate = function postActivate(data, callback) {
 			});
 		};
 
+		var activateNextDevice = function activateNextDevice(cb) {
+			var activate_next_q = "UPDATE device";
+			activate_next_q += " SET is_activated = TRUE, activated_date = NOW(), last_upd = NOW()";
+			activate_next_q += " WHERE id = (SELECT id FROM device WHERE is_activated = false ORDER BY priority ASC LIMIT 1)";
+
+			client.query(activate_next_q, function(error) {
+				if (error) {
+					console.log(error);
+				}
+				cb();
+			});
+		};
+
 		var checkPlace = function checkPlace(priority, cb) {
 			var place = priority;
 			var total = place;
@@ -385,7 +400,20 @@ var postActivate = function postActivate(data, callback) {
 					cb(ERROR_DEVICE_EXISTS);
 				}
 				else {
-					if (activationcode_id) {
+					if ((insert_result.rows[0].priority % SIGNUPS_PER_ACTIVATION) === 0) {
+						// Asynchronously activate a device
+						activateNextDevice(function onActivateNextDevice() {
+							if (activationcode_id) {
+								useActivationCode(activationcode_id, function onActivationCodeUsed(error) {
+									cb(null, insert_result.rows[0].priority);
+								});
+							}
+							else {
+								cb(null, insert_result.rows[0].priority);	
+							}
+						});
+					}
+					else if (activationcode_id) {
 						useActivationCode(activationcode_id, function onActivationCodeUsed(error) {
 							cb(null, insert_result.rows[0].priority);
 						});
@@ -443,7 +471,7 @@ var postActivate = function postActivate(data, callback) {
 							// Don't use another activation code on this activated device.
 							activationcode_id = 0;
 							response_object.activated = true;
-						}
+						}						
 
 						activateDevice(activationcode_id, device.id, function(error) {
 							if (error) {
