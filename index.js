@@ -10,6 +10,7 @@ var POST_ACTIVIATE = "/activate";
 var POST_REGISTER = "/register";
 var POST_SHARE = "/share";
 var GET_VALIDATE = "/validate"; 
+var GET_INFO = "/info"; 
 
 var ERROR_ACTIVATION_CODE_INVALID = new Error("Activation code has already been used or does not exist.");
 ERROR_ACTIVATION_CODE_INVALID.errorCode = 400;
@@ -248,7 +249,44 @@ var getValidate = function getValidate(hashed_id, callback) {
 	});
 };
 
+
 exports.getValidate = getValidate; 
+
+// get the queue data to display on the webpage 
+var getInfo = function getInfo(callback) {
+	var q = "SELECT SUM(CASE WHEN is_activated = TRUE THEN 1 END) as let_in,"; 
+	q += " SUM(CASE WHEN is_activated = FALSE THEN 1 END) as still_waiting"; 
+	q += " FROM device;"; 
+
+	pg.connect(SETTINGS.pg, function onPostgreSQLConnect(err, client, done) {
+		if (err) {
+			console.log(err); 
+			done(client); 
+			callback(ERROR_FAILED_DATABASE_CONNECT); 
+			return; 
+		}
+
+		client.query(q, function(error, result) {
+			if (error) {
+				console.log(error);
+				done(client); 
+				callback(ERROR_PG_QUERY); 
+				return; 
+			}
+			// close the PG client! 
+			done(client); 
+
+			var response_data = {
+				"let_in": result.rows[0].let_in, 
+				"still_waiting": result.rows[0].still_waiting 
+			}; 
+
+			callback(null, response_data); 
+		});
+	});
+};
+exports.getInfo = getInfo; 
+
 
 /**
  * Check if the device is in the queue. If it is not in the queue, add it to the queue. The 
@@ -697,7 +735,14 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 	    return;
 	} // end if 
 	else if (request.method.toUpperCase() === REQUEST_METHOD_GET) {
-		var route = request.url.slice(0, request.url.indexOf("?")); 
+		var qs_index = request.url.indexOf("?"); 
+		var route; 
+
+		if (qs_index !== -1) { 
+			route = request.url.slice(0, request.url.indexOf("?")); 
+		} else {
+			route = request.url; 
+		}
  
 		switch(route) {
 
@@ -728,6 +773,19 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 					response.end(); 
 				});
 				break; 
+
+			case GET_INFO:
+				getInfo(function(err, json_response) {
+					if (err) {
+						console.log(err); 
+						response.statusCode = err.errorCode; 
+					} else {
+						response.writeHead(200, {"Content-Type": "application/json"}); 
+						response.write(JSON.stringify(json_response)); 
+					}	
+					response.end(); 
+				});
+				break;  	
 
 			default: 
 				response.statusCode = 204; 
