@@ -26,5 +26,5 @@
 	"scripts": {
 		"test": "mocha -u tdd --timeout 6500"
 	},
-	"version": "0.0.6"
+	"version": "0.0.7"
 }
