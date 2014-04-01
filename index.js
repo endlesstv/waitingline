@@ -38,6 +38,9 @@ ERROR_PG_QUERY.errorCode = 400;
 var ERROR_FAILED_DATABASE_CONNECT = new Error("Failed to connect to the database.");
 ERROR_FAILED_DATABASE_CONNECT.errorCode = 500;
 
+var ERROR_USER_EXISTS = new Error("User is already registered.");
+ERROR_USER_EXISTS.errorCode = 400;
+
 var SETTINGS;
 
 var TWITTER_PERCENT_JUMP = 0.05; 
