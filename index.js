@@ -254,10 +254,11 @@ var getValidate = function getValidate(hashed_id, callback) {
 
 exports.getValidate = getValidate; 
 
+
 // get the queue data to display on the webpage 
 var getInfo = function getInfo(callback) {
-	var q = "SELECT SUM(CASE WHEN is_activated = TRUE THEN 1 END) as let_in,"; 
-	q += " SUM(CASE WHEN is_activated = FALSE THEN 1 END) as still_waiting"; 
+	var q = "SELECT SUM(CASE WHEN is_activated = TRUE THEN 1 END) as inside,"; 
+	q += " SUM(CASE WHEN is_activated = FALSE THEN 1 END) as outside"; 
 	q += " FROM device;"; 
 
 	pg.connect(SETTINGS.pg, function onPostgreSQLConnect(err, client, done) {
@@ -275,12 +276,12 @@ var getInfo = function getInfo(callback) {
 				callback(ERROR_PG_QUERY); 
 				return; 
 			}
-			// close the PG client! 
+			 
 			done(client); 
 
 			var response_data = {
-				"let_in": result.rows[0].let_in, 
-				"still_waiting": result.rows[0].still_waiting 
+				"inside": result.rows[0].inside, 
+				"outside": result.rows[0].outside 
 			}; 
 
 			callback(null, response_data); 
@@ -833,3 +834,30 @@ exports.onHttpRequest = onHttpRequest;
 // Create a start the HTTP server.
 var waitingLine = http.createServer(onHttpRequest);
 waitingLine.listen(WAITING_LINE_PORT);
+
+var persistent = true; 
+
+if (persistent) {
+	var io = require('socket.io'); 
+	// pass the server to the socket
+	var socket = io.listen(waitingLine); 
+	// connection listener
+	socket.on('connection', function(client) {
+
+		client.on('message', function(event) {
+		});
+
+		var interval = setInterval(function() {
+			getInfo(function(err, count_data) {
+				count_data = JSON.stringify(count_data); 
+				client.send(count_data); 
+			});
+		}, 1000);
+
+		client.on('disconnect', function() {
+			clearInterval(interval); 
+		});
+	});
+}
+
+
