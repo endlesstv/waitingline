@@ -862,7 +862,6 @@ if (persistent) {
 		});
 
 		client.on('disconnect', function() {
-			clearInterval(interval); 
 		});
 	});
 }
