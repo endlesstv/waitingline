@@ -1,0 +1,26 @@
+#waiting-wrapper {
+	margin-left: 100px;
+	padding-right: 100px;
+	float: right;
+	font: garamond;
+	font-size: 200%;
+}
+
+#inside-wrapper {
+	margin-right: 100px;
+	padding-left: 100px;
+	font: garamond;
+	font-size: 200%;
+}
+
+#inside-count {
+	font: garamond;
+	font-size: 120%;
+	color: green;
+}
+
+#outside-count {
+	font: garamond;
+	font-size: 120%;
+	color: red;
+}
