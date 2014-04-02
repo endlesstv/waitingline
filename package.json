@@ -10,7 +10,8 @@
 		"formidable": "x.x.x",
 		"node-uuid":"1.2.0",
 		"pg": "2.5.1", 
-		"nodemailer": "0.5.3"
+		"nodemailer": "0.5.3", 
+		"socket.io": "0.9.16"
 	},
 	"description": "Waiting line for EndlessTV.",
 	"devDependencies": {

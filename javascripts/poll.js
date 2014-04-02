@@ -9,7 +9,7 @@ function updateCount(count, location) {
 
 // connect to the webserver
 var SERVER_URL = "localhost"
-var socket = new io.connect(SERVER_URL, {port: 3000}); 
+var socket = io.connect(SERVER_URL, {port: 3000}); 
 // listeners 
 socket.on('connect', function() {
 	//console.log('Client connected'); 
@@ -25,7 +25,6 @@ socket.on('disconnect', function() {
 	//console.log("You've been dumped. Sorry kid."); 
 });
 
-socket.connect()
 
 	
 

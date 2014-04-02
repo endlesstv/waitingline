@@ -2,6 +2,7 @@ var formidable = require("formidable");
 var fs = require("fs");
 var http = require("http");
 var pg = require("pg");
+var events = require("events"); 
 
 var WAITING_LINE_PORT = 3000;
 var REQUEST_METHOD_POST = "POST";
@@ -48,6 +49,7 @@ var LOCKDOWN_DATE = new Date("3/29/2014");
 
 var SIGNUPS_PER_ACTIVATION = 10;
 
+var socket_emitter = new events.EventEmitter(); 
 
 /**
  * We'll pulling settings from an external configuration file that is in this directory but not a
@@ -705,6 +707,8 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 							response.statusCode = error.errorCode;
 						}				
 						else {							
+							// emit to the socket 
+							socket_emitter.emit("deviceAdded"); 
 							response.statusCode = 201;
 							response.setHeader("Content-Type", "application/json");
 							response.write(JSON.stringify(response_data));
@@ -840,19 +844,22 @@ var persistent = true;
 if (persistent) {
 	var io = require('socket.io'); 
 	// pass the server to the socket
-	var socket = io.listen(waitingLine); 
+	var socket = io.listen(waitingLine, {log: false}); 
+
 	// connection listener
 	socket.on('connection', function(client) {
 
 		client.on('message', function(event) {
 		});
 
-		var interval = setInterval(function() {
+		// add a listener to the socket_emitter, 
+		// which in turn triggers the socket to send data to the client 
+		socket_emitter.on("deviceAdded", function() {
 			getInfo(function(err, count_data) {
 				count_data = JSON.stringify(count_data); 
 				client.send(count_data); 
 			});
-		}, 1000);
+		});
 
 		client.on('disconnect', function() {
 			clearInterval(interval); 
