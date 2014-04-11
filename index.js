@@ -50,7 +50,7 @@ var FACEBOOK_PERCENT_JUMP = 0.10;
 
 var LOCKDOWN_DATE = new Date("4/9/2014");
 
-var SIGNUPS_PER_ACTIVATION = 5;
+var SIGNUPS_PER_ACTIVATION = 2;
 
 var socket_emitter = new events.EventEmitter(); 
 
