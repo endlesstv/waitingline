@@ -406,6 +406,8 @@ var postActivate = function postActivate(data, callback) {
 					cb(ERROR_DEVICE_EXISTS);
 				}
 				else {
+					// Emit to the socket 
+					socket_emitter.emit("deviceAdded"); 
 					if ((insert_result.rows[0].priority % SIGNUPS_PER_ACTIVATION) === 0) {
 						// Asynchronously activate a device
 						activateNextDevice(function onActivateNextDevice() {
@@ -710,8 +712,6 @@ var onHttpRequest = function onHttpRequest(request, response, form_parser) {
 							response.statusCode = error.errorCode;
 						}				
 						else {							
-							// emit to the socket 
-							socket_emitter.emit("deviceAdded"); 
 							response.statusCode = 201;
 							response.setHeader("Content-Type", "application/json");
 							response.write(JSON.stringify(response_data));
@@ -842,31 +842,32 @@ exports.onHttpRequest = onHttpRequest;
 var waitingLine = http.createServer(onHttpRequest);
 waitingLine.listen(WAITING_LINE_PORT);
 
-var persistent = true; 
+var io = require('socket.io').listen(waitingLine, {"log": false}); 
 
-if (persistent) {
-	var io = require('socket.io'); 
-	// pass the server to the socket
-	var socket = io.listen(waitingLine, {log: false}); 
+// Socket.io connection listener.
+io.sockets.on("connection", function(client) {		
+	console.log("%d analytics client connected", Date.now());
 
-	// connection listener
-	socket.on('connection', function(client) {
-
-		client.on('message', function(event) {
-		});
-
-		// add a listener to the socket_emitter, 
-		// which in turn triggers the socket to send data to the client 
-		socket_emitter.on("deviceAdded", function() {
-			getInfo(function(err, count_data) {
-				count_data = JSON.stringify(count_data); 
-				client.send(count_data); 
-			});
-		});
-
-		client.on('disconnect', function() {
-		});
+	// Let the client know the current state of the waiting line. 
+	getInfo(function(err, count_data) {
+		count_data = JSON.stringify(count_data); 
+		client.emit("message", count_data); 
 	});
-}
+
+	client.on("message", function(event) {
+	});
+
+	client.on('disconnect', function() {
+		console.log("%d analytics client disconnected", Date.now());
+	});
+});
+
+// Update all connected clients on the state of the waiting line.
+socket_emitter.on("deviceAdded", function() {
+	getInfo(function(err, count_data) {
+		count_data = JSON.stringify(count_data); 
+		io.sockets.emit("message", count_data); 
+	});
+});
 
 
