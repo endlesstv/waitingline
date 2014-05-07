@@ -319,42 +319,12 @@ var postActivate = function postActivate(data, callback) {
 			return;
 		}
 
-		var useActivationCode = function useActivationCode(activationcode_id, cb) {
-			var use_query = "UPDATE activationcode";
-			use_query += " SET used = TRUE, used_date = NOW(), last_upd = NOW()";
-			use_query += " WHERE id = $1";
-
-			client.query(use_query, [activationcode_id], function(error) {
-				cb(error);
-			});
-		};		
-
-		var activateDevice = function activateDevice(activationcode_id, device_id, cb) {
-			if (!activationcode_id) {
-				// Invalid activation code.
-				cb();
-				return;
-			}
-
-			var activate_query = "UPDATE device";
-			activate_query += " SET is_activated = TRUE, activationcode_id = $1, activated_date = NOW(), last_upd = NOW()";
-			activate_query += " WHERE id = $2";
-			client.query(activate_query, [activationcode_id, device_id], function(error) {
-				if (error) {
-					cb(error);
-				}
-				else {
-					useActivationCode(activationcode_id, cb);
-				}
-			});
-		};
-
 		var activateNextDevice = function activateNextDevice(cb) {
 			var activate_next_q = "UPDATE device";
 			activate_next_q += " SET is_activated = TRUE, activated_date = NOW(), last_upd = NOW()";
 			activate_next_q += " WHERE id = (SELECT id FROM device WHERE is_activated = false ORDER BY priority ASC LIMIT 1)";
 
-			client.query(activate_next_q, function(error) {
+			client.query(activate_next_q, function(error, result) {
 				if (error) {
 					console.log(error);
 				}
@@ -385,21 +355,8 @@ var postActivate = function postActivate(data, callback) {
 			// Attempt to insert the device into the database. If it fails, we can be reasonably
 			// certain that failure is caused because of key duplication, i.e. a second attempt to
 			/// register an already registered device.
-			var insert_query;
-			var insert_parameters;
-
-			if (activationcode_id) {
-				insert_query = "INSERT INTO device (id, is_activated, activated_date, activationcode_id) VALUES ($1, TRUE, NOW(), $2) RETURNING priority";
-				insert_parameters = [data.device_id, activationcode_id];
-			} else if (Date.now() < LOCKDOWN_DATE.getTime()) {
-				// The queue is not in place yet.
-				insert_query = "INSERT INTO device (id, is_activated, activated_date) VALUES ($1, TRUE, NOW()) RETURNING priority";
-				insert_parameters = [data.device_id];
-			} else {
-				// The queue is in place, don't set is_activated = TRUE.
-				insert_query = "INSERT INTO device (id) VALUES ($1) RETURNING priority";
-				insert_parameters = [data.device_id];
-			}
+			var insert_query = "INSERT INTO device (id, is_activated, activated_date) VALUES ($1, TRUE, NOW()) RETURNING priority";
+			var insert_parameters = [data.device_id];
 
 			client.query(insert_query, [data.device_id], function onInsert(error, insert_result) {
 				if (error) {
@@ -407,41 +364,13 @@ var postActivate = function postActivate(data, callback) {
 				}
 				else {
 					// Emit to the socket 
-					socket_emitter.emit("deviceAdded"); 
-					if ((insert_result.rows[0].priority % SIGNUPS_PER_ACTIVATION) === 0) {
-						// Asynchronously activate a device
-						activateNextDevice(function onActivateNextDevice() {
-							if (activationcode_id) {
-								useActivationCode(activationcode_id, function onActivationCodeUsed(error) {
-									cb(null, insert_result.rows[0].priority);
-								});
-							}
-							else {
-								cb(null, insert_result.rows[0].priority);	
-							}
-						});
-					}
-					else if (activationcode_id) {
-						useActivationCode(activationcode_id, function onActivationCodeUsed(error) {
-							cb(null, insert_result.rows[0].priority);
-						});
-					}
-					else {
-						cb(null, insert_result.rows[0].priority);	
-					}
+					socket_emitter.emit("deviceAdded");
+
+					activateNextDevice(function onActivateNextDevice() {						
+						cb(null, insert_result.rows[0].priority);
+					});
 				}
 			});	
-		};
-
-		var checkActivationCode = function checkActivationCode(code, cb) {
-			var check_query = "SELECT * FROM activationcode WHERE code = $1 AND used = FALSE";
-			client.query(check_query, [code], function(error, result) {
-				if (error || result.rows.length === 0) {
-					cb(0);
-					return;
-				}
-				cb(result.rows[0].id);
-			});
 		};
 
 		var response_object = {
@@ -457,97 +386,36 @@ var postActivate = function postActivate(data, callback) {
 			callback(null, response_object);
 		};
 
-		if (data.activation_code) {
-			// Check if the activation code exists and has not been used.
-			checkActivationCode(data.activation_code, function(activationcode_id) {
-				if (activationcode_id === 0) {
-					// The code was used or doesn't exist, add an error message to the response but
-					// continue logic as we may need to enqueue a new device.
-					response_object.status = 1;
-					response_object.message = ERROR_ACTIVATION_CODE_INVALID.message;
-				}
+		// We're enqueuing a device without an activation code. Check if the device is already
+		// enqueued before attempting to insert it.
+		checkDevice(client, data.device_id, function onDeviceChecked(device) {
+			if (device) {
+				response_object.activated = true;
+				response_object.status = 1;
+				response_object.message = ERROR_DEVICE_EXISTS.message;					
+				response_object.place = 0;
+				response_object.total = 0;
 
-				// Check the device to see if it has been previously registered. If it has, we
-				// we don't add the error as we do below, to avoid confusion on successfully
-				// activating a device that already exists.
-				checkDevice(client, data.device_id, function onDeviceChecked(device) {
-					if (device) {
-						if (device.is_activated) {
-							response_object.status = 1;
-							response_object.message = "Device is already activated";
-
-							// Don't use another activation code on this activated device.
-							activationcode_id = 0;
-							response_object.activated = true;
-						}						
-
-						activateDevice(activationcode_id, device.id, function(error) {
-							if (error) {
-								response_object.status = 1;
-								response_object.message = "Failed to activate device (unknown).";
-							}
-							else if (activationcode_id > 0) {
-								response_object.activated = true;
-							}
-
-							checkPlace(device.priority, function(place, total) {		
-								response_object.place = place;
-								response_object.total = total;
-								respond();
-							});					
-						});
-					}
-					else {						
-						// Because 0 is falsy, logic that inserts an activatecode_id should
-						// function normally.
-						insertDevice(activationcode_id, function(error, priority) {
-							if (error) {
-								response_object.status = 1;
-								response_object.message = error.message;
-							}
-							response_object.activated = Date.now() < LOCKDOWN_DATE.getTime();
-
-							checkPlace(priority, function(place, total) {						
-								response_object.place = place;
-								response_object.total = total;
-								respond();								
-							});
-						});
-					}
+				checkPlace(device.priority, function(place, total) {						
+					response_object.place = place;
+					response_object.total = total;						
+					respond();
 				});
-			});
-		}
-		else {
-			// We're enqueuing a device without an activation code. Check if the device is already
-			// enqueued before attempting to insert it.
-			checkDevice(client, data.device_id, function onDeviceChecked(device) {
-				if (device) {
-					response_object.activated = device.is_activated;
-					response_object.status = 1;
-					response_object.message = ERROR_DEVICE_EXISTS.message;					
+			}
+			else {					
+				insertDevice(0, function(error, priority) {
+					if (error) {
+						response_object.status = 1;
+						response_object.message = error.message;							
+					}
 
-					checkPlace(device.priority, function(place, total) {						
-						response_object.place = place;
-						response_object.total = total;						
-						respond();
-					});
-				}
-				else {					
-					insertDevice(0, function(error, priority) {
-						if (error) {
-							response_object.status = 1;
-							response_object.message = error.message;							
-						}
-
-						checkPlace(priority, function(place, total) {						
-							response_object.place = place;
-							response_object.total = total;
-							respond();
-						});
-					});
-				}
-			});
-		}
+					response_object.activated = true;
+					response_object.place = 0;
+					response_object.total = 0;
+					respond();
+				});
+			}
+		});
 	});
 };
 exports.postActivate = postActivate;
